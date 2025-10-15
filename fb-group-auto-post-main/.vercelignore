@@ -1,0 +1,36 @@
+# Ignore data files (will be created at runtime)
+data/
+sessions/
+*.json
+
+# Ignore logs
+*.log
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+temp/
+tmp/
+*.tmp
+
+# Ignore test files
+test_*
+*_test.py
+
+# Ignore documentation
+README*.md
+*.md
