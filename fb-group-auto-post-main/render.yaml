@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: facebook-automation-dashboard
+    env: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium && playwright install-deps chromium
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 300 dashboard:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+      - key: PORT
+        value: 5000
+    healthCheckPath: /
+    plan: free
+    region: oregon

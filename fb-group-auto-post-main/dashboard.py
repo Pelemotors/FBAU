@@ -1515,10 +1515,10 @@ def delete_item(item_type, item_id):
     except Exception as e:
         return jsonify({"success": False, "message": f"שגיאה: {str(e)}"})
 
-# Handler ל-Vercel
-app = app
-
+# Handler ל-Render
 if __name__ == '__main__':
-    print("🚀 מתחיל דשבורד פייסבוק...")
-    print("📱 פתח דפדפן וגש ל: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    print(f"🚀 מתחיל דשבורד פייסבוק על פורט {port}...")
+    print("📱 הדשבורד זמין!")
+    app.run(debug=False, host='0.0.0.0', port=port)
