@@ -1,0 +1,57 @@
+[
+  {
+    "id": 1,
+    "name": "AI לומדים",
+    "url": "https://www.facebook.com/groups/1229294725669511",
+    "active": true,
+    "created": "2025-10-04T15:11:58.049442",
+    "is_my_group": true,
+    "updated": "2025-10-04T16:55:12.709966"
+  },
+  {
+    "id": 2,
+    "name": "מתכנתים פרילנסרים",
+    "url": "https://www.facebook.com/groups/1502756793303704/",
+    "active": true,
+    "created": "2025-10-04T15:35:58.037694"
+  },
+  {
+    "id": 4,
+    "name": "פרסום עסקים בישראל",
+    "url": "https://www.facebook.com/groups/persum.israel/",
+    "active": true,
+    "created": "2025-10-04T15:36:41.494728"
+  },
+  {
+    "id": 4,
+    "name": "פרסום בחינם",
+    "url": "https://www.facebook.com/groups/freepirsum/",
+    "is_my_group": false,
+    "active": true,
+    "created": "2025-10-05T14:22:17.331454"
+  },
+  {
+    "id": 5,
+    "name": "עסקים בשרון פרסום וקידום",
+    "url": "https://www.facebook.com/groups/457264171062560/",
+    "is_my_group": false,
+    "active": true,
+    "created": "2025-10-05T14:23:02.744183"
+  },
+  {
+    "id": 6,
+    "name": "פרסום חינם בכל תחום",
+    "url": "https://www.facebook.com/groups/534147806705604/",
+    "is_my_group": false,
+    "active": true,
+    "created": "2025-10-05T14:23:33.855923"
+  },
+  {
+    "id": 7,
+    "name": "דרושים בתחום Ai בינה מלאכותית",
+    "url": "http://facebook.com/groups/1027511938680919/",
+    "is_my_group": false,
+    "active": true,
+    "created": "2025-10-05T14:24:27.688772"
+  }
+]

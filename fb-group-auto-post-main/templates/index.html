@@ -1,0 +1,1877 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- עמודת התחברות -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-sign-in-alt"></i> התחברות לפייסבוק
+            </div>
+            <div class="card-body">
+                {% if not has_cookies %}
+                    <p class="text-muted">עדיין לא התחברת לפייסבוק</p>
+                    <a href="/login" class="btn btn-primary w-100">
+                        <i class="fab fa-facebook"></i> התחבר עכשיו
+                    </a>
+                {% else %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> 
+                        מחובר לפייסבוק בהצלחה!
+                    </div>
+                    <button class="btn btn-warning w-100" onclick="reconnect()">
+                        <i class="fas fa-sync"></i> התחבר מחדש
+                    </button>
+                {% endif %}
+                
+                <!-- סטטוס משתמש פייסבוק -->
+                <div class="alert mt-3" id="userStatusAlert">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6><i class="fas fa-user"></i> סטטוס משתמש פייסבוק:</h6>
+                            <span id="userStatusText">טוען...</span>
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% if has_cookies %}
+                            <button class="btn btn-sm btn-success" onclick="saveCurrentSession()">
+                                <i class="fas fa-save"></i> שמור סשן
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="showSessionManager()">
+                                <i class="fas fa-users"></i> נהל סשנים
+                            </button>
+                            <button class="btn btn-sm btn-warning" onclick="disconnectUser()">
+                                <i class="fas fa-sign-out-alt"></i> נתק
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-primary" onclick="connectNewUser()">
+                                <i class="fas fa-sign-in-alt"></i> התחבר משתמש חדש
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- עמודת קבוצות -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-users"></i> קבוצות פייסבוק
+            </div>
+            <div class="card-body">
+                <form id="addGroupForm">
+                    <div class="mb-3">
+                        <label class="form-label">שם הקבוצה</label>
+                        <input type="text" class="form-control" id="groupName" placeholder="שם הקבוצה">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL של הקבוצה</label>
+                        <input type="url" class="form-control" id="groupUrl" placeholder="https://facebook.com/groups/...">
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="isMyGroup">
+                            <label class="form-check-label" for="isMyGroup">
+                                <i class="fas fa-home"></i> זו קבוצה שלי (בבעלותי)
+                            </label>
+                        </div>
+                        <small class="text-muted">אם מסומן - ישתמש ב-simple_facebook_bot (מהיר), אחרת - selector_explorer (דינמי)</small>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-plus"></i> הוסף קבוצה
+                    </button>
+                </form>
+                
+                <hr>
+                
+                <h6>קבוצות שמורות ({{ groups|length }})</h6>
+                <div class="list-group" id="groupsList">
+                    {% for group in groups %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ group.name }}</strong>
+                            {% if group.get('is_my_group', False) %}
+                            <span class="badge bg-success ms-2" id="badge-{{ group.id }}">
+                                <i class="fas fa-home"></i> שלי
+                            </span>
+                            {% else %}
+                            <span class="badge bg-info ms-2" id="badge-{{ group.id }}">
+                                <i class="fas fa-search"></i> חיצונית
+                            </span>
+                            {% endif %}
+                            <br>
+                            <small class="text-muted">{{ group.url }}</small>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary" onclick="editGroup({{ group.id }}, '{{ group.name|e }}', '{{ group.url|e }}', {{ group.get('is_my_group', False)|lower }})" title="ערוך קבוצה">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-outline-info" onclick="toggleGroupType({{ group.id }}, {{ group.get('is_my_group', False)|lower }})" title="שנה סוג">
+                                <i class="fas fa-exchange-alt"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteItem('group', {{ group.id }})" title="מחק קבוצה">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- עמודת פוסטים -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-edit"></i> פוסטים
+            </div>
+            <div class="card-body">
+                <form id="addPostForm">
+                    <div class="mb-3">
+                        <label class="form-label">שם הפוסט</label>
+                        <input type="text" class="form-control" id="postName" placeholder="שם הפוסט">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">תוכן הפוסט</label>
+                        <textarea class="form-control" id="postText" rows="3" placeholder="כתוב את תוכן הפוסט כאן..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-plus"></i> הוסף פוסט
+                    </button>
+                </form>
+                
+                <hr>
+                
+                <h6>פוסטים שמורים ({{ posts|length }})</h6>
+                <div class="list-group" id="postsList">
+                    {% for post in posts %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <strong>{{ post.name }}</strong>
+                                <p class="mb-1 text-muted">{{ post.text[:100] if post.text else 'אין תוכן' }}{% if post.text and post.text|length > 100 %}...{% endif %}</p>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary edit-post-btn" 
+                                        data-post-id="{{ post.id }}" 
+                                        data-post-name="{{ post.name }}" 
+                                        data-post-text="{{ post.text }}" 
+                                        title="ערוך פוסט">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deleteItem('post', {{ post.id }})" title="מחק פוסט">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <!-- עמודת מדיה -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-images"></i> ניהול מדיה
+            </div>
+            <div class="card-body">
+                <form id="addMediaGroupForm">
+                    <div class="mb-3">
+                        <label class="form-label">כותרת קבוצת המדיה</label>
+                        <input type="text" class="form-control" id="mediaGroupTitle" placeholder="לדוגמה: תמונות רכב למכירה">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">בחר קבצי מדיה</label>
+                        <div class="input-group">
+                            <input type="file" class="form-control" id="mediaFiles" multiple accept="image/*,video/*" style="display: none;">
+                            <input type="text" class="form-control" id="selectedFilesDisplay" placeholder="לחץ 'בחר קבצים' כדי לבחור מדיה" readonly>
+                            <button class="btn btn-outline-secondary" type="button" onclick="selectMultipleFiles()">
+                                <i class="fas fa-folder-open"></i> בחר קבצים
+                            </button>
+                        </div>
+                        <small class="text-muted">תמונות: JPG, PNG, GIF | וידאו: MP4, MOV, AVI, WEBM (עד 50MB)</small>
+                        <div id="uploadProgress" class="mt-2" style="display: none;">
+                            <div class="progress">
+                                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted">מעלה קבצים...</small>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-plus"></i> הוסף קבוצת מדיה
+                    </button>
+                </form>
+                
+                <hr>
+                
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6>קבוצות מדיה שמורות (<span id="mediaCount">{{ media|length }}</span>)</h6>
+                    <small class="text-muted" id="mediaInfo"></small>
+                </div>
+                
+                <!-- אזור גלילה לקבוצות מדיה -->
+                <div style="max-height: 400px; overflow-y: auto;" id="mediaScrollArea">
+                <div class="list-group" id="mediaList">
+                    {% for item in media %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <strong class="me-2">{{ item.title if item.title else 'קבוצת מדיה ' + item.id|string }}</strong>
+                                        <span class="badge bg-primary">{{ item.files|length if item.files else 0 }} קבצים</span>
+                                    </div>
+                                    
+                                    {% if item.files %}
+                                        <div class="mb-2">
+                                            {% for file in item.files[:3] %}
+                                            <span class="badge bg-light text-dark me-1 mb-1" title="{{ file.name }}">
+                                                <i class="fas fa-file-image"></i> {{ file.name[:20] }}{% if file.name|length > 20 %}...{% endif %}
+                                                </span>
+                                            {% endfor %}
+                                            {% if item.files|length > 3 %}
+                                            <span class="badge bg-secondary">
+                                                +{{ item.files|length - 3 }} נוספים
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock"></i> {{ item.created[:16] if item.created else 'לא ידוע' }}
+                                    </small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteItem('media', {{ item.id }})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+                
+                <!-- פאגינציה לקבוצות מדיה -->
+                <nav aria-label="ניווט מדיה" class="mt-3" id="mediaPagination" style="display: none;">
+                    <div class="d-flex justify-content-center align-items-center">
+                        <button class="btn btn-outline-primary me-2" id="mediaPrevBtn" onclick="loadMediaPage(currentMediaPage - 1)" disabled>
+                            <i class="fas fa-chevron-right"></i> הקודם
+                        </button>
+                        
+                        <div class="btn-group mx-2" id="mediaPageNumbers">
+                            <!-- מספרי עמודים יוכנסו כאן -->
+                        </div>
+                        
+                        <button class="btn btn-outline-primary ms-2" id="mediaNextBtn" onclick="loadMediaPage(currentMediaPage + 1)" disabled>
+                            הבא <i class="fas fa-chevron-left"></i>
+                        </button>
+                    </div>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- עמודת תזמון -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-clock"></i> תזמון פרסום
+            </div>
+            <div class="card-body">
+                <form id="scheduleForm">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">בחר קבוצות</label>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary" onclick="selectAllGroups()">
+                                    <i class="fas fa-check-square"></i> בחר הכל
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="clearAllGroups()">
+                                    <i class="fas fa-square"></i> נקה בחירה
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                            <div id="groupsCheckboxes">
+                            {% for group in groups %}
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input group-checkbox" type="checkbox" 
+                                           value="{{ group.id }}" id="group_{{ group.id }}">
+                                    <label class="form-check-label d-flex align-items-center" for="group_{{ group.id }}">
+                                        <span class="me-2">{{ group.name }}</span>
+                                        {% if group.get('is_my_group', False) %}
+                                        <span class="badge bg-success ms-auto">
+                                            <i class="fas fa-home"></i> שלי
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-info ms-auto">
+                                            <i class="fas fa-search"></i> חיצונית
+                                        </span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <small class="text-muted">
+                            נבחרו <span id="selectedGroupsCount">0</span> קבוצות
+                        </small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">בחר פוסט (אופציונלי)</label>
+                        <select class="form-control" id="selectedPost">
+                            <option value="">ללא פוסט (רק מדיה)</option>
+                            {% for post in posts %}
+                            <option value="{{ post.id }}">{{ post.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">בחר מדיה (אופציונלי)</label>
+                        <select class="form-control" id="selectedMedia">
+                            <option value="">ללא מדיה</option>
+                            {% if media %}
+                                {% for item in media %}
+                                <option value="{{ item.id }}">{{ item.title if item.title else 'קבוצת מדיה ' + item.id|string }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="" disabled>אין קבוצות מדיה שמורות</option>
+                            {% endif %}
+                        </select>
+                        {% if not media %}
+                        <small class="text-muted">יצור קבוצת מדיה בצד ימין כדי לבחור מדיה לפרסום</small>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">זמן פרסום</label>
+                        <select class="form-control" id="scheduleTime">
+                            <option value="now">פרסום מיידי</option>
+                            <option value="custom">תזמון מותאם</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="customTimeDiv" style="display: none;">
+                        <input type="datetime-local" class="form-control" id="customTime">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-paper-plane"></i> פרסם עכשיו
+                    </button>
+                </form>
+                 
+                 <!-- טרמינל לוגים -->
+                 <div class="card mt-3" id="logsCard">
+                     <div class="card-header d-flex justify-content-between align-items-center">
+                         <span><i class="fas fa-terminal"></i> לוגי פרסום</span>
+                         <div>
+                             <button class="btn btn-sm btn-outline-danger" id="stopPublishingBtn" onclick="stopPublishing()" style="display: none;" title="עצור פרסום">
+                                 <i class="fas fa-stop"></i>
+                             </button>
+                             <button class="btn btn-sm btn-outline-light" onclick="toggleLogs()">
+                                 <i class="fas fa-eye" id="toggleLogsIcon"></i>
+                             </button>
+                             <button class="btn btn-sm btn-outline-light" onclick="clearLogs()">
+                                 <i class="fas fa-trash"></i>
+                             </button>
+                         </div>
+                     </div>
+                     <div class="card-body" id="logsCardBody">
+                         <!-- סטטיסטיקות -->
+                         <div class="row mb-3">
+                             <div class="col-3">
+                                 <div class="card text-center">
+                                     <div class="card-body p-2">
+                                         <h5 class="mb-0" id="totalGroups">0</h5>
+                                         <small>קבוצות נבחרו</small>
+                                     </div>
+                                 </div>
+                             </div>
+                             <div class="col-3">
+                                 <div class="card text-center bg-success text-white">
+                                     <div class="card-body p-2">
+                                         <h5 class="mb-0" id="successCount">0</h5>
+                                         <small>הושלמו</small>
+                                     </div>
+                                 </div>
+                             </div>
+                             <div class="col-3">
+                                 <div class="card text-center bg-danger text-white">
+                                     <div class="card-body p-2">
+                                         <h5 class="mb-0" id="errorCount">0</h5>
+                                         <small>נכשלו</small>
+                                     </div>
+                                 </div>
+                             </div>
+                             <div class="col-3">
+                                 <div class="card text-center bg-info text-white">
+                                     <div class="card-body p-2">
+                                         <h5 class="mb-0" id="successRate">0%</h5>
+                                         <small>אחוז הצלחה</small>
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+                         
+                         <!-- טרמינל לוגים -->
+                         <div id="logsTerminal" class="bg-dark text-light p-3 rounded" style="height: 200px; overflow-y: auto; font-family: monospace;">
+                             <div class="text-success"><i class="fas fa-info-circle"></i> מוכן לפרסום...</div>
+                         </div>
+                         
+                         <!-- רשימת קישורים מוצלחים -->
+                         <div id="successfulLinksContainer" class="mt-3" style="display: none;">
+                             <div class="alert alert-success">
+                                 <h6 class="alert-heading"><i class="fas fa-check-circle"></i> קישורים לפוסטים שפורסמו בהצלחה:</h6>
+                                 <hr>
+                                 <div id="successfulLinksList" class="d-flex flex-column gap-2">
+                                     <!-- קישורים יתווספו כאן -->
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- היסטוריית פרסומים -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                <i class="fas fa-history"></i> היסטוריית פרסומים
+                </div>
+                <div>
+                    <span id="historyInfo" class="text-muted"></span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="post" style="cursor: pointer;">
+                                    פוסט <i class="fas fa-sort"></i>
+                                </th>
+                                <th class="sortable" data-sort="groups" style="cursor: pointer;">
+                                    קבוצות <i class="fas fa-sort"></i>
+                                </th>
+                                <th class="sortable" data-sort="media" style="cursor: pointer;">
+                                    מדיה <i class="fas fa-sort"></i>
+                                </th>
+                                <th class="sortable" data-sort="status" style="cursor: pointer;">
+                                    סטטוס <i class="fas fa-sort"></i>
+                                </th>
+                                <th class="sortable" data-sort="created" style="cursor: pointer;">
+                                    זמן <i class="fas fa-sort"></i>
+                                </th>
+                                <th>פעולות</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleHistory">
+                            {% for item in schedule %}
+                            <tr>
+                                <td>{{ item.post.name if item.post and item.post.name else 'פוסט לא נמצא' }}</td>
+                                <td>
+                                    {% if item.groups %}
+                                        {% for group in item.groups %}
+                                            <span class="badge bg-secondary">{{ group.name }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">אין קבוצות</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.media_files and item.media_files|length > 0 %}
+                                        <i class="fas fa-images"></i> {{ item.media_files|length }} קבצים
+                                    {% else %}
+                                        <i class="fas fa-times"></i> אין
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.status == 'completed' %}
+                                        <span class="badge bg-success">הושלם</span>
+                                    {% elif item.status == 'scheduled' %}
+                                        <span class="badge bg-warning">מתוזמן</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">נכשל</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.created if item.created else 'לא ידוע' }}</td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-sm btn-outline-success" onclick="republishItem({{ item.id if item.id else 0 }})" title="פרסם שוב">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteItem('schedule', {{ item.id if item.id else 0 }})" title="מחק">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- פאגינציה -->
+                <nav aria-label="ניווט היסטוריה" class="mt-3">
+                    <div class="d-flex justify-content-center align-items-center">
+                        <button class="btn btn-outline-primary me-2" id="prevBtn" onclick="loadHistoryPage(currentPage - 1)" disabled>
+                            <i class="fas fa-chevron-right"></i> הקודם
+                        </button>
+                        
+                        <div class="btn-group mx-2" id="pageNumbers">
+                            <!-- מספרי עמודים יוכנסו כאן -->
+            </div>
+                        
+                        <button class="btn btn-outline-primary ms-2" id="nextBtn" onclick="loadHistoryPage(currentPage + 1)" disabled>
+                            הבא <i class="fas fa-chevron-left"></i>
+                        </button>
+                    </div>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- מודל לעריכת פוסט -->
+<div class="modal fade" id="editPostModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> עריכת פוסט</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editPostForm">
+                    <input type="hidden" id="editPostId">
+                    <div class="mb-3">
+                        <label class="form-label">שם הפוסט</label>
+                        <input type="text" class="form-control" id="editPostName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">תוכן הפוסט</label>
+                        <textarea class="form-control" id="editPostText" rows="5" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditedPost()">שמור שינויים</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- מודל לעריכת קבוצה -->
+<div class="modal fade" id="editGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> עריכת קבוצה</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editGroupForm">
+                    <input type="hidden" id="editGroupId">
+                    <div class="mb-3">
+                        <label class="form-label">שם הקבוצה</label>
+                        <input type="text" class="form-control" id="editGroupName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL של הקבוצה</label>
+                        <input type="url" class="form-control" id="editGroupUrl" required>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="editIsMyGroup">
+                            <label class="form-check-label" for="editIsMyGroup">
+                                <i class="fas fa-home"></i> זו קבוצה שלי (בבעלותי)
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditedGroup()">שמור שינויים</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- מודל לניהול סשנים -->
+<div class="modal fade" id="sessionManagerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-users"></i> ניהול סשנים</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">שמור את הסשן הנוכחי:</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="sessionName" placeholder="לדוגמה: משתמש עבודה">
+                        <button class="btn btn-success" onclick="saveCurrentSession()">
+                            <i class="fas fa-save"></i> שמור
+                        </button>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6>סשנים שמורים:</h6>
+                <div id="sessionsList">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">טוען...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">סגור</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+     // פונקציה עזר לשליחת נתונים
+     function sendData(url, data, callback) {
+         fetch(url, {
+             method: 'POST',
+             headers: {
+                 'Content-Type': 'application/json'
+             },
+             body: JSON.stringify(data)
+         })
+         .then(response => response.json())
+         .then(result => {
+             if (callback) callback(result);
+         })
+         .catch(error => {
+             console.error('שגיאה:', error);
+             showAlert('שגיאה בחיבור לשרת: ' + error.message, 'danger');
+         });
+     }
+
+    // הוסף קבוצה
+    document.getElementById('addGroupForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const name = document.getElementById('groupName').value;
+        const url = document.getElementById('groupUrl').value;
+        const isMyGroup = document.getElementById('isMyGroup').checked;
+        
+        sendData('/add_group', {name, url, is_my_group: isMyGroup}, function(result) {
+            if (result.success) {
+                showAlert(result.message);
+                location.reload();
+            } else {
+                showAlert(result.message, 'danger');
+            }
+        });
+    });
+
+    // הוסף פוסט
+    document.getElementById('addPostForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const name = document.getElementById('postName').value;
+        const text = document.getElementById('postText').value;
+        
+        sendData('/add_post', {name, text}, function(result) {
+            if (result.success) {
+                showAlert(result.message);
+                location.reload();
+            } else {
+                showAlert(result.message, 'danger');
+            }
+        });
+    });
+
+    // משתנה גלובלי לשמירת קבצים שהועלו
+    let uploadedFiles = [];
+
+    // הוסף קבוצת מדיה
+    document.getElementById('addMediaGroupForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const title = document.getElementById('mediaGroupTitle').value;
+        
+        if (!title) {
+            showAlert('אנא הזן כותרת לקבוצת המדיה', 'warning');
+            return;
+        }
+        
+        if (uploadedFiles.length === 0) {
+            showAlert('אנא בחר קבצים תחילה', 'warning');
+            return;
+        }
+        
+        console.log('שולח נתונים:', {title, files: uploadedFiles});
+        
+        sendData('/add_media_group', {title, files: uploadedFiles}, function(result) {
+            console.log('תשובה מהשרת:', result);
+            if (result.success) {
+                showAlert(result.message);
+                // נקה את הטופס
+                document.getElementById('mediaGroupTitle').value = '';
+                document.getElementById('selectedFilesDisplay').value = '';
+                document.getElementById('mediaFiles').value = '';
+                uploadedFiles = [];
+                location.reload();
+            } else {
+                showAlert(result.message, 'danger');
+            }
+        });
+    });
+
+    // תזמון פרסום
+    document.getElementById('scheduleForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const groups = getSelectedGroups();
+        const postId = parseInt(document.getElementById('selectedPost').value);
+        const mediaId = parseInt(document.getElementById('selectedMedia').value) || null;
+        const scheduleTime = document.getElementById('scheduleTime').value === 'custom' ? 
+            document.getElementById('customTime').value : 'now';
+        
+        if (groups.length === 0) {
+            showAlert('אנא בחר לפחות קבוצה אחת', 'warning');
+            return;
+        }
+        
+        if (!postId && !mediaId) {
+            showAlert('אנא בחר פוסט או מדיה', 'warning');
+            return;
+        }
+        
+        sendData('/schedule_post', {groups, post_id: postId, media_id: mediaId, schedule_time: scheduleTime}, function(result) {
+            if (result.success) {
+                 // התחל לוגים
+                 startPublishingLogs(groups);
+                 
+                showAlert(result.message);
+                 if (result.schedule_id) {
+                     currentScheduleId = result.schedule_id;
+                     startLogPolling(result.schedule_id);
+                 }
+                 loadHistoryPage(1);
+            } else {
+                showAlert(result.message, 'danger');
+            }
+        });
+    });
+
+    // הצג/הסתר תזמון מותאם
+    document.getElementById('scheduleTime').addEventListener('change', function() {
+        const customDiv = document.getElementById('customTimeDiv');
+        if (this.value === 'custom') {
+            customDiv.style.display = 'block';
+        } else {
+            customDiv.style.display = 'none';
+        }
+    });
+
+    // מחק פריט
+    function deleteItem(type, id) {
+        if (confirm('האם אתה בטוח שברצונך למחוק פריט זה?')) {
+            fetch(`/delete_item/${type}/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert(result.message);
+                    if (type === 'schedule') {
+                        // אם זה פריט מההיסטוריה, טען מחדש את ההיסטוריה
+                        loadHistoryPage(currentPage);
+                    } else if (type === 'media') {
+                        // אם זה פריט מדיה, טען מחדש את המדיה
+                        loadMediaPage(currentMediaPage);
+                    } else {
+                        // אחרת, רענן את הדף
+                    location.reload();
+                    }
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('שגיאה במחיקת הפריט: ' + error.message, 'danger');
+            });
+        }
+    }
+
+    // התחבר מחדש
+    function reconnect() {
+        if (confirm('האם אתה בטוח שברצונך להתחבר מחדש?')) {
+            window.location.href = '/login';
+        }
+    }
+
+    // בחר קבצים מרובים
+    function selectMultipleFiles() {
+        document.getElementById('mediaFiles').click();
+    }
+
+    // טיפול בבחירת קבצים
+    document.getElementById('mediaFiles').addEventListener('change', function(event) {
+        const files = Array.from(event.target.files);
+        if (files.length > 0) {
+            // הצג הודעת טעינה
+            showAlert(`נבחרו ${files.length} קבצים. מעלה לשרת...`, 'info');
+            
+            // הצג progress bar
+            const progressDiv = document.getElementById('uploadProgress');
+            const progressBar = progressDiv.querySelector('.progress-bar');
+            progressDiv.style.display = 'block';
+            progressBar.style.width = '0%';
+            
+            // העלה קבצים לשרת
+            uploadFiles(files, progressBar);
+        }
+    });
+
+    // העלה קבצים לשרת
+    function uploadFiles(files, progressBar) {
+        const formData = new FormData();
+        
+        // הוסף כל קובץ ל-FormData
+        files.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        // שליחה לשרת
+        fetch('/upload_media', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                // שמור את הקבצים שהועלו
+                uploadedFiles = result.files;
+                
+                // הצג הודעה על הצלחה
+                showAlert(result.message, 'success');
+                
+                // הצג את שמות הקבצים
+                const fileNames = result.files.map(file => file.name).join(', ');
+                document.getElementById('selectedFilesDisplay').value = fileNames;
+                
+                // הסתר progress bar
+                document.getElementById('uploadProgress').style.display = 'none';
+            } else {
+                showAlert(result.message, 'danger');
+                document.getElementById('uploadProgress').style.display = 'none';
+            }
+        })
+        .catch(error => {
+            showAlert('שגיאה בהעלאת קבצים: ' + error.message, 'danger');
+            document.getElementById('uploadProgress').style.display = 'none';
+        });
+    }
+
+    // פונקציות לניהול התחברות משתמש
+    function updateUserStatus() {
+        fetch('/get_user_status')
+            .then(response => response.json())
+            .then(data => {
+                const statusText = document.getElementById('userStatusText');
+                const statusAlert = document.getElementById('userStatusAlert');
+                
+                if (data.connected) {
+                    statusText.textContent = data.username || 'משתמש מחובר';
+                    statusAlert.className = 'alert alert-success';
+                } else {
+                    statusText.textContent = 'אין משתמש מחובר';
+                    statusAlert.className = 'alert alert-warning';
+                }
+            })
+            .catch(error => {
+                console.error('שגיאה בקבלת סטטוס משתמש:', error);
+                document.getElementById('userStatusText').textContent = 'שגיאה בטעינת סטטוס';
+                document.getElementById('userStatusAlert').className = 'alert alert-danger';
+            });
+    }
+
+    function disconnectUser() {
+        if (confirm('האם אתה בטוח שברצונך לנתק את המשתמש הנוכחי?')) {
+            fetch('/disconnect_user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                showAlert(data.message, data.success ? 'success' : 'danger');
+                updateUserStatus();
+            })
+            .catch(error => {
+                showAlert('שגיאה בניתוק משתמש: ' + error.message, 'danger');
+            });
+        }
+    }
+
+    function connectNewUser() {
+        if (confirm('האם אתה בטוח שברצונך להתחבר עם משתמש חדש? המשתמש הנוכחי יותק.')) {
+            showAlert('מתחבר עם משתמש חדש... אנא המתן', 'info');
+            
+            fetch('/connect_new_user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                showAlert(data.message, data.success ? 'success' : 'danger');
+                updateUserStatus();
+            })
+            .catch(error => {
+                showAlert('שגיאה בהתחברות משתמש חדש: ' + error.message, 'danger');
+            });
+        }
+    }
+
+     // משתנים גלובליים לפאגינציה ומיון
+     let currentPage = 1;
+     let currentSortBy = 'created';
+     let currentSortOrder = 'desc';
+     
+     // משתנים גלובליים לפאגינציה של מדיה
+     let currentMediaPage = 1;
+     
+     // משתנים גלובליים ללוגים
+     let logsVisible = true;
+     let publishingStats = { totalGroups: 0, successCount: 0, errorCount: 0 };
+     let successfulLinks = [];
+     let currentScheduleId = null;
+     let isPublishingActive = false;
+     let publishingInterval = null;
+
+    // עדכן סטטוס משתמש בעת טעינת הדף
+    document.addEventListener('DOMContentLoaded', function() {
+        updateUserStatus();
+        
+        // עדכן סטטוס כל 30 שניות
+        setInterval(updateUserStatus, 30000);
+        
+        // טען היסטוריית פרסומים
+        loadHistoryPage(1);
+        
+        // טען קבוצות מדיה
+        loadMediaPage(1);
+        
+        // הוסף מאזינים למיון
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('dblclick', function() {
+                const sortBy = this.getAttribute('data-sort');
+                toggleSort(sortBy);
+            });
+        });
+        
+        // הוסף מאזינים לצ'קבוקסים של קבוצות
+        document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', updateSelectedGroupsCount);
+        });
+        
+        // הוסף מאזינים לכפתורי עריכה של פוסטים
+        document.querySelectorAll('.edit-post-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                console.log('Edit post button clicked');
+                const postId = this.getAttribute('data-post-id');
+                const postName = this.getAttribute('data-post-name');
+                const postText = this.getAttribute('data-post-text');
+                console.log('Data attributes:', {postId, postName, postText});
+                editPost(postId, postName, postText);
+            });
+        });
+    });
+
+    // פונקציה לטעינת עמוד היסטוריה
+    function loadHistoryPage(page) {
+        const url = `/get_schedule_history?page=${page}&per_page=15&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
+        
+        // שמור את המיקום הנוכחי של הגלילה
+        const scrollPosition = window.pageYOffset;
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateHistoryTable(data.data);
+                    updatePagination(data.pagination);
+                    currentPage = page;
+                    
+                    // החזר את הגלילה למיקום המקורי
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollPosition);
+                    }, 10);
+                } else {
+                    showAlert(data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('שגיאה בטעינת היסטוריה: ' + error.message, 'danger');
+            });
+    }
+
+    // פונקציה לעדכון טבלת ההיסטוריה
+    function updateHistoryTable(data) {
+        const tbody = document.getElementById('scheduleHistory');
+        tbody.innerHTML = '';
+        
+        data.forEach(item => {
+            const row = document.createElement('tr');
+            
+            const postName = item.post && item.post.name ? item.post.name : 'פוסט לא נמצא';
+            const groupsHtml = item.groups && item.groups.length > 0 
+                ? item.groups.map(g => `<span class="badge bg-secondary">${g.name}</span>`).join(' ')
+                : '<span class="text-muted">אין קבוצות</span>';
+            
+            const mediaHtml = item.media_files && item.media_files.length > 0
+                ? `<i class="fas fa-images"></i> ${item.media_files.length} קבצים`
+                : '<i class="fas fa-times"></i> אין';
+            
+            let statusHtml = '';
+            if (item.status === 'completed') {
+                statusHtml = '<span class="badge bg-success">הושלם</span>';
+            } else if (item.status === 'scheduled') {
+                statusHtml = '<span class="badge bg-warning">מתוזמן</span>';
+            } else {
+                statusHtml = '<span class="badge bg-danger">נכשל</span>';
+            }
+            
+            const created = item.created || 'לא ידוע';
+            const itemId = item.id || 0;
+            
+            row.innerHTML = `
+                <td>${postName}</td>
+                <td>${groupsHtml}</td>
+                <td>${mediaHtml}</td>
+                <td>${statusHtml}</td>
+                <td>${created}</td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-outline-success" onclick="republishItem(${itemId})" title="פרסם שוב">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteItem('schedule', ${itemId})" title="מחק">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            
+            tbody.appendChild(row);
+        });
+    }
+
+    // פונקציה לעדכון פאגינציה
+    function updatePagination(pagination) {
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageNumbers = document.getElementById('pageNumbers');
+        const historyInfo = document.getElementById('historyInfo');
+        
+        // עדכן כפתורים
+        prevBtn.disabled = !pagination.has_prev;
+        nextBtn.disabled = !pagination.has_next;
+        
+        // עדכן מספרי עמודים
+        pageNumbers.innerHTML = '';
+        
+        // הצג מספרי עמודים חכמים
+        const currentPage = pagination.current_page;
+        const totalPages = pagination.total_pages;
+        
+        // אם יש פחות מ-7 עמודים, הצג את כולם
+        if (totalPages <= 7) {
+            for (let i = 1; i <= totalPages; i++) {
+                const btn = createPageButton(i, i === currentPage);
+                pageNumbers.appendChild(btn);
+            }
+        } else {
+            // הצג עמודים חכמים
+            if (currentPage <= 4) {
+                // אם אנחנו בתחילת הרשימה
+                for (let i = 1; i <= 5; i++) {
+                    const btn = createPageButton(i, i === currentPage);
+                    pageNumbers.appendChild(btn);
+                }
+                pageNumbers.appendChild(createEllipsis());
+                const btn = createPageButton(totalPages, false);
+                pageNumbers.appendChild(btn);
+            } else if (currentPage >= totalPages - 3) {
+                // אם אנחנו בסוף הרשימה
+                const btn = createPageButton(1, false);
+                pageNumbers.appendChild(btn);
+                pageNumbers.appendChild(createEllipsis());
+                for (let i = totalPages - 4; i <= totalPages; i++) {
+                    const btn = createPageButton(i, i === currentPage);
+                    pageNumbers.appendChild(btn);
+                }
+            } else {
+                // אם אנחנו באמצע
+                const btn = createPageButton(1, false);
+                pageNumbers.appendChild(btn);
+                pageNumbers.appendChild(createEllipsis());
+                
+                for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                    const btn = createPageButton(i, i === currentPage);
+                    pageNumbers.appendChild(btn);
+                }
+                
+                pageNumbers.appendChild(createEllipsis());
+                const lastBtn = createPageButton(totalPages, false);
+                pageNumbers.appendChild(lastBtn);
+            }
+        }
+        
+        // עדכן מידע על העמוד
+        const startItem = (pagination.current_page - 1) * pagination.per_page + 1;
+        const endItem = Math.min(pagination.current_page * pagination.per_page, pagination.total_items);
+        historyInfo.textContent = `מציג ${startItem}-${endItem} מתוך ${pagination.total_items} פעולות`;
+    }
+
+    // פונקציה ליצירת כפתור עמוד
+    function createPageButton(pageNum, isActive) {
+        const btn = document.createElement('button');
+        btn.className = isActive ? 'btn btn-primary' : 'btn btn-outline-primary';
+        btn.textContent = pageNum;
+        btn.onclick = function(e) {
+            e.preventDefault();
+            loadHistoryPage(pageNum);
+            // מניעת גלילה למעלה
+            return false;
+        };
+        return btn;
+    }
+
+    // פונקציה ליצירת נקודות (...)
+    function createEllipsis() {
+        const span = document.createElement('span');
+        span.className = 'btn btn-outline-secondary disabled';
+        span.textContent = '...';
+        span.style.pointerEvents = 'none';
+        return span;
+    }
+
+    // פונקציה למיון
+    function toggleSort(sortBy) {
+        if (currentSortBy === sortBy) {
+            // אם כבר מיון לפי עמודה זו, החלף כיוון
+            currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            // אם עמודה חדשה, התחל עם סדר יורד
+            currentSortBy = sortBy;
+            currentSortOrder = 'desc';
+        }
+        
+        // עדכן אייקונים
+        document.querySelectorAll('.sortable i').forEach(icon => {
+            icon.className = 'fas fa-sort';
+        });
+        
+        const currentIcon = document.querySelector(`[data-sort="${sortBy}"] i`);
+        if (currentSortOrder === 'asc') {
+            currentIcon.className = 'fas fa-sort-up';
+        } else {
+            currentIcon.className = 'fas fa-sort-down';
+        }
+        
+        // טען מחדש עם המיון החדש
+        loadHistoryPage(1);
+    }
+
+    // פונקציה לטעינת עמוד מדיה
+    function loadMediaPage(page) {
+        const url = `/get_media_groups?page=${page}&per_page=5`;
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateMediaTable(data.data);
+                    updateMediaPagination(data.pagination);
+                    currentMediaPage = page;
+                } else {
+                    showAlert(data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('שגיאה בטעינת מדיה: ' + error.message, 'danger');
+            });
+    }
+
+    // פונקציה לעדכון טבלת המדיה
+    function updateMediaTable(data) {
+        const mediaList = document.getElementById('mediaList');
+        const mediaCount = document.getElementById('mediaCount');
+        
+        mediaList.innerHTML = '';
+        
+        data.forEach(item => {
+            const listItem = document.createElement('div');
+            listItem.className = 'list-group-item';
+            
+            const title = item.title || `קבוצת מדיה ${item.id}`;
+            const filesCount = item.files ? item.files.length : 0;
+            const created = item.created ? item.created.substring(0, 16) : 'לא ידוע';
+            
+            let filesHtml = '';
+            if (item.files && item.files.length > 0) {
+                // הצג רק 3 קבצים ראשונים
+                const filesToShow = item.files.slice(0, 3);
+                filesHtml = filesToShow.map(file => {
+                    const shortName = file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name;
+                    return `<span class="badge bg-light text-dark me-1 mb-1" title="${file.name}">
+                        <i class="fas fa-file-image"></i> ${shortName}
+                    </span>`;
+                }).join('');
+                
+                if (item.files.length > 3) {
+                    filesHtml += `<span class="badge bg-secondary">+${item.files.length - 3} נוספים</span>`;
+                }
+            }
+            
+            listItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            <strong class="me-2">${title}</strong>
+                            <span class="badge bg-primary">${filesCount} קבצים</span>
+                        </div>
+                        
+                        ${filesHtml ? `<div class="mb-2">${filesHtml}</div>` : ''}
+                        
+                        <small class="text-muted">
+                            <i class="fas fa-clock"></i> ${created}
+                        </small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteItem('media', ${item.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            mediaList.appendChild(listItem);
+        });
+    }
+
+    // פונקציה לעדכון פאגינציה של מדיה
+    function updateMediaPagination(pagination) {
+        const prevBtn = document.getElementById('mediaPrevBtn');
+        const nextBtn = document.getElementById('mediaNextBtn');
+        const pageNumbers = document.getElementById('mediaPageNumbers');
+        const mediaInfo = document.getElementById('mediaInfo');
+        const mediaPagination = document.getElementById('mediaPagination');
+        
+        // עדכן כפתורים
+        prevBtn.disabled = !pagination.has_prev;
+        nextBtn.disabled = !pagination.has_next;
+        
+        // הצג פאגינציה רק אם יש יותר מעמוד אחד
+        if (pagination.total_pages > 1) {
+            mediaPagination.style.display = 'block';
+            
+            // עדכן מספרי עמודים
+            pageNumbers.innerHTML = '';
+            
+            const currentPage = pagination.current_page;
+            const totalPages = pagination.total_pages;
+            
+            // הצג מספרי עמודים חכמים
+            if (totalPages <= 5) {
+                for (let i = 1; i <= totalPages; i++) {
+                    const btn = createMediaPageButton(i, i === currentPage);
+                    pageNumbers.appendChild(btn);
+                }
+            } else {
+                if (currentPage <= 3) {
+                    for (let i = 1; i <= 4; i++) {
+                        const btn = createMediaPageButton(i, i === currentPage);
+                        pageNumbers.appendChild(btn);
+                    }
+                    pageNumbers.appendChild(createEllipsis());
+                    const btn = createMediaPageButton(totalPages, false);
+                    pageNumbers.appendChild(btn);
+                } else if (currentPage >= totalPages - 2) {
+                    const btn = createMediaPageButton(1, false);
+                    pageNumbers.appendChild(btn);
+                    pageNumbers.appendChild(createEllipsis());
+                    for (let i = totalPages - 3; i <= totalPages; i++) {
+                        const btn = createMediaPageButton(i, i === currentPage);
+                        pageNumbers.appendChild(btn);
+                    }
+                } else {
+                    const btn = createMediaPageButton(1, false);
+                    pageNumbers.appendChild(btn);
+                    pageNumbers.appendChild(createEllipsis());
+                    
+                    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                        const btn = createMediaPageButton(i, i === currentPage);
+                        pageNumbers.appendChild(btn);
+                    }
+                    
+                    pageNumbers.appendChild(createEllipsis());
+                    const lastBtn = createMediaPageButton(totalPages, false);
+                    pageNumbers.appendChild(lastBtn);
+                }
+            }
+        } else {
+            mediaPagination.style.display = 'none';
+        }
+        
+        // עדכן מידע על העמוד
+        const startItem = (pagination.current_page - 1) * pagination.per_page + 1;
+        const endItem = Math.min(pagination.current_page * pagination.per_page, pagination.total_items);
+        mediaInfo.textContent = `מציג ${startItem}-${endItem} מתוך ${pagination.total_items} קבוצות`;
+    }
+
+    // פונקציה ליצירת כפתור עמוד מדיה
+    function createMediaPageButton(pageNum, isActive) {
+        const btn = document.createElement('button');
+        btn.className = isActive ? 'btn btn-primary' : 'btn btn-outline-primary';
+        btn.textContent = pageNum;
+        btn.onclick = function(e) {
+            e.preventDefault();
+            loadMediaPage(pageNum);
+            return false;
+        };
+        return btn;
+    }
+
+    // פונקציה לפרסום מחדש
+    function republishItem(itemId) {
+        if (confirm('האם אתה בטוח שברצונך לפרסם מחדש את הפעולה הזו?')) {
+            fetch(`/republish_item/${itemId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    // טען מחדש את ההיסטוריה
+                    loadHistoryPage(currentPage);
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('שגיאה בפרסום מחדש: ' + error.message, 'danger');
+            });
+        }
+    }
+
+    // פונקציות לטיפול בבחירת קבוצות
+    function selectAllGroups() {
+        document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+            checkbox.checked = true;
+        });
+        updateSelectedGroupsCount();
+    }
+
+    function clearAllGroups() {
+        document.querySelectorAll('.group-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        updateSelectedGroupsCount();
+    }
+
+    function updateSelectedGroupsCount() {
+        const checkedBoxes = document.querySelectorAll('.group-checkbox:checked');
+        const countElement = document.getElementById('selectedGroupsCount');
+        if (countElement) {
+            countElement.textContent = checkedBoxes.length;
+        }
+    }
+
+    function getSelectedGroups() {
+        const checkedBoxes = document.querySelectorAll('.group-checkbox:checked');
+        return Array.from(checkedBoxes).map(checkbox => parseInt(checkbox.value));
+    }
+
+    // פונקציות עריכה לפוסטים
+    function editPost(postId, postName, postText) {
+        console.log('editPost called with:', {postId, postName, postText});
+        
+        document.getElementById('editPostId').value = postId;
+        document.getElementById('editPostName').value = postName;
+        document.getElementById('editPostText').value = postText;
+        
+        const modal = new bootstrap.Modal(document.getElementById('editPostModal'));
+        modal.show();
+    }
+
+    function saveEditedPost() {
+        const postId = document.getElementById('editPostId').value;
+        const postName = document.getElementById('editPostName').value.trim();
+        const postText = document.getElementById('editPostText').value.trim();
+        
+        if (!postName || !postText) {
+            showAlert('יש למלא את כל השדות', 'warning');
+            return;
+        }
+        
+        fetch('/edit_post', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                post_id: parseInt(postId),
+                name: postName,
+                text: postText
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showAlert(result.message, 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editPostModal'));
+                modal.hide();
+                location.reload();
+            } else {
+                showAlert(result.message, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('שגיאה בעריכת הפוסט: ' + error.message, 'danger');
+        });
+    }
+
+    // פונקציות עריכה לקבוצות
+    function editGroup(groupId, groupName, groupUrl, isMyGroup) {
+        document.getElementById('editGroupId').value = groupId;
+        document.getElementById('editGroupName').value = groupName;
+        document.getElementById('editGroupUrl').value = groupUrl;
+        document.getElementById('editIsMyGroup').checked = isMyGroup;
+        
+        const modal = new bootstrap.Modal(document.getElementById('editGroupModal'));
+        modal.show();
+    }
+
+    function saveEditedGroup() {
+        const groupId = document.getElementById('editGroupId').value;
+        const groupName = document.getElementById('editGroupName').value.trim();
+        const groupUrl = document.getElementById('editGroupUrl').value.trim();
+        const isMyGroup = document.getElementById('editIsMyGroup').checked;
+        
+        if (!groupName || !groupUrl) {
+            showAlert('יש למלא את כל השדות', 'warning');
+            return;
+        }
+        
+        fetch('/edit_group', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                group_id: parseInt(groupId),
+                name: groupName,
+                url: groupUrl,
+                is_my_group: isMyGroup
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showAlert(result.message, 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editGroupModal'));
+                modal.hide();
+                location.reload();
+            } else {
+                showAlert(result.message, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('שגיאה בעריכת הקבוצה: ' + error.message, 'danger');
+        });
+    }
+    
+    // פונקציות ללוגים
+    function addLog(message, type = 'info') {
+        const terminal = document.getElementById('logsTerminal');
+        const timestamp = new Date().toLocaleTimeString('he-IL');
+        
+        let icon = 'fas fa-info-circle';
+        let colorClass = 'text-light';
+        
+        switch(type) {
+            case 'success':
+                icon = 'fas fa-check-circle';
+                colorClass = 'text-success';
+                break;
+            case 'error':
+                icon = 'fas fa-times-circle';
+                colorClass = 'text-danger';
+                break;
+            case 'warning':
+                icon = 'fas fa-exclamation-triangle';
+                colorClass = 'text-warning';
+                break;
+            case 'progress':
+                icon = 'fas fa-spinner fa-spin';
+                colorClass = 'text-info';
+                break;
+        }
+        
+        const logEntry = document.createElement('div');
+        logEntry.className = `mb-1 ${colorClass}`;
+        logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> <i class="${icon}"></i> ${message}`;
+        
+        terminal.appendChild(logEntry);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+    
+    function clearLogs() {
+        const terminal = document.getElementById('logsTerminal');
+        terminal.innerHTML = '<div class="text-success"><i class="fas fa-info-circle"></i> לוגים נוקו...</div>';
+        publishingStats = { totalGroups: 0, successCount: 0, errorCount: 0 };
+        successfulLinks = [];
+        document.getElementById('successfulLinksContainer').style.display = 'none';
+        updateStats();
+    }
+    
+    function toggleLogs() {
+        const logsCardBody = document.getElementById('logsCardBody');
+        const toggleIcon = document.getElementById('toggleLogsIcon');
+        
+        if (logsVisible) {
+            logsCardBody.style.display = 'none';
+            toggleIcon.className = 'fas fa-eye-slash';
+            logsVisible = false;
+        } else {
+            logsCardBody.style.display = 'block';
+            toggleIcon.className = 'fas fa-eye';
+            logsVisible = true;
+        }
+    }
+    
+    function updateStats() {
+        document.getElementById('totalGroups').textContent = publishingStats.totalGroups;
+        document.getElementById('successCount').textContent = publishingStats.successCount;
+        document.getElementById('errorCount').textContent = publishingStats.errorCount;
+        
+        const successRate = publishingStats.totalGroups > 0 ?
+            Math.round((publishingStats.successCount / publishingStats.totalGroups) * 100) : 0;
+        document.getElementById('successRate').textContent = `${successRate}%`;
+    }
+    
+    function startPublishingLogs(selectedGroups) {
+        publishingStats.totalGroups = selectedGroups.length;
+        publishingStats.successCount = 0;
+        publishingStats.errorCount = 0;
+        successfulLinks = [];
+        document.getElementById('successfulLinksContainer').style.display = 'none';
+        updateStats();
+        
+        // הצג כפתור עצירה
+        document.getElementById('stopPublishingBtn').style.display = 'inline-block';
+        isPublishingActive = true;
+        
+        addLog(`מתחיל פרסום ל-${selectedGroups.length} קבוצות...`, 'info');
+    }
+    
+    function logGroupResult(groupName, success, errorMessage = '', postUrl = '') {
+        if (success) {
+            publishingStats.successCount++;
+            addLog(`✅ פורסם בהצלחה בקבוצה: ${groupName}`, 'success');
+            
+            // אסוף קישור מוצלח
+            if (postUrl) {
+                successfulLinks.push({
+                    groupName: groupName,
+                    url: postUrl
+                });
+            }
+        } else {
+            publishingStats.errorCount++;
+            addLog(`❌ נכשל פרסום בקבוצה: ${groupName} - ${errorMessage}`, 'error');
+        }
+        updateStats();
+        
+        if (publishingStats.successCount + publishingStats.errorCount === publishingStats.totalGroups) {
+            const successRate = Math.round((publishingStats.successCount / publishingStats.totalGroups) * 100);
+            addLog(`🎉 פרסום הושלם! אחוז הצלחה: ${successRate}%`, 'success');
+            
+            // הצג קישורים מוצלחים
+            if (successfulLinks.length > 0) {
+                displaySuccessfulLinks();
+            }
+        }
+    }
+    
+    function displaySuccessfulLinks() {
+        const container = document.getElementById('successfulLinksContainer');
+        const linksList = document.getElementById('successfulLinksList');
+        
+        linksList.innerHTML = '';
+        
+        successfulLinks.forEach((link, index) => {
+            const linkItem = document.createElement('div');
+            linkItem.className = 'd-flex align-items-center gap-2';
+            linkItem.innerHTML = `
+                <span class="badge bg-success">${index + 1}</span>
+                <strong>${link.group_name}:</strong>
+                <a href="${link.url}" target="_blank" class="text-decoration-none">
+                    ${link.url} <i class="fas fa-external-link-alt"></i>
+                </a>
+            `;
+            linksList.appendChild(linkItem);
+        });
+        
+        container.style.display = 'block';
+    }
+    
+    function startLogPolling(scheduleId) {
+        addLog(`מתחיל מעקב אחר פרסום #${scheduleId}...`, 'info');
+        
+        publishingInterval = setInterval(() => {
+            // בדוק אם המשתמש עצר את הפרסום
+            if (!isPublishingActive) {
+                clearInterval(publishingInterval);
+                return;
+            }
+            
+            fetch(`/get_publishing_logs/${scheduleId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.logs) {
+                    data.logs.forEach(log => {
+                        addLog(log.message, log.type);
+                    });
+                    
+                    // עדכן קישורים מוצלחים
+                    if (data.successful_posts && data.successful_posts.length > 0) {
+                        successfulLinks = data.successful_posts;
+                    }
+                    
+                    if (data.completed) {
+                        clearInterval(publishingInterval);
+                        publishingInterval = null;
+                        isPublishingActive = false;
+                        document.getElementById('stopPublishingBtn').style.display = 'none';
+                        addLog('מעקב הושלם!', 'success');
+                        
+                        // הצג קישורים מוצלחים
+                        if (successfulLinks.length > 0) {
+                            displaySuccessfulLinks();
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('שגיאה במעקב לוגים:', error);
+            });
+        }, 2000);
+        
+        setTimeout(() => {
+            if (publishingInterval) {
+                clearInterval(publishingInterval);
+                publishingInterval = null;
+                isPublishingActive = false;
+                document.getElementById('stopPublishingBtn').style.display = 'none';
+                addLog('⏰ פג הזמן למעקב פרסום', 'warning');
+            }
+        }, 300000); // 5 דקות timeout
+    }
+    
+    function stopPublishing() {
+        if (confirm('האם אתה בטוח שברצונך לעצור את הפרסום?')) {
+            // עצור את המעקב
+            if (publishingInterval) {
+                clearInterval(publishingInterval);
+                publishingInterval = null;
+            }
+            
+            // עדכן משתנים
+            isPublishingActive = false;
+            document.getElementById('stopPublishingBtn').style.display = 'none';
+            
+            // שלח בקשה לשרת לעצור את הפרסום
+            if (currentScheduleId) {
+                fetch(`/stop_publishing/${currentScheduleId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog('🛑 הפרסום נעצר בהצלחה', 'warning');
+                    } else {
+                        addLog('⚠️ שגיאה בעצירת הפרסום: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    addLog('⚠️ שגיאה בעצירת הפרסום: ' + error.message, 'error');
+                });
+            }
+            
+            addLog('🛑 המשתמש עצר את הפרסום', 'warning');
+        }
+    }
+
+    // פונקציה לשינוי סוג קבוצה
+    function toggleGroupType(groupId, currentIsMyGroup) {
+        const newIsMyGroup = !currentIsMyGroup;
+        const newType = newIsMyGroup ? 'שלי' : 'חיצונית';
+        
+        if (confirm(`האם אתה בטוח שברצונך לשנות את סוג הקבוצה ל-${newType}?`)) {
+            fetch(`/update_group/${groupId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    is_my_group: newIsMyGroup
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showAlert(data.message, data.success ? 'success' : 'danger');
+                if (data.success) {
+                    // עדכן את התצוגה
+                    const badge = document.getElementById(`badge-${groupId}`);
+                    if (badge) {
+                        if (newIsMyGroup) {
+                            badge.className = 'badge bg-success ms-2';
+                            badge.innerHTML = '<i class="fas fa-home"></i> שלי';
+                        } else {
+                            badge.className = 'badge bg-info ms-2';
+                            badge.innerHTML = '<i class="fas fa-search"></i> חיצונית';
+                        }
+                    }
+                    
+                    // עדכן את הכפתור
+                    const button = badge.parentElement.parentElement.querySelector('button[onclick*="toggleGroupType"]');
+                    if (button) {
+                        button.setAttribute('onclick', `toggleGroupType(${groupId}, ${newIsMyGroup})`);
+                    }
+                }
+            })
+            .catch(error => {
+                showAlert('שגיאה בעדכון סוג הקבוצה: ' + error.message, 'danger');
+            });
+        }
+    }
+
+    // פונקציות לניהול סשנים
+    function showSessionManager() {
+        const modal = new bootstrap.Modal(document.getElementById('sessionManagerModal'));
+        modal.show();
+        loadSessionsList();
+    }
+
+    function loadSessionsList() {
+        fetch('/list_sessions')
+            .then(response => response.json())
+            .then(data => {
+                const sessionsList = document.getElementById('sessionsList');
+                
+                if (data.success && data.sessions.length > 0) {
+                    let html = '<div class="list-group">';
+                    data.sessions.forEach(session => {
+                        const createdDate = new Date(session.created).toLocaleString('he-IL');
+                        html += `
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>${session.username}</strong>
+                                    <br>
+                                    <small class="text-muted">נוצר: ${createdDate}</small>
+                                </div>
+                                <div>
+                                    ${session.is_current ? '<span class="badge bg-success me-2">פעיל</span>' : ''}
+                                    <button class="btn btn-sm btn-primary" onclick="switchToSession('${session.filename}')" ${session.is_current ? 'disabled' : ''}>
+                                        <i class="fas fa-sign-in-alt"></i> החלף
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    sessionsList.innerHTML = html;
+                } else {
+                    sessionsList.innerHTML = '<div class="alert alert-info">אין סשנים שמורים</div>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('sessionsList').innerHTML = '<div class="alert alert-danger">שגיאה בטעינת הסשנים</div>';
+                console.error('שגיאה בטעינת סשנים:', error);
+            });
+    }
+
+    function saveCurrentSession() {
+        const sessionName = document.getElementById('sessionName').value.trim();
+        
+        if (!sessionName) {
+            showAlert('יש להזין שם לסשן', 'warning');
+            return;
+        }
+        
+        fetch('/save_current_session', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: sessionName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            showAlert(data.message, data.success ? 'success' : 'danger');
+            if (data.success) {
+                document.getElementById('sessionName').value = '';
+                loadSessionsList();
+            }
+        })
+        .catch(error => {
+            showAlert('שגיאה בשמירת הסשן: ' + error.message, 'danger');
+        });
+    }
+
+    function switchToSession(filename) {
+        if (confirm('האם אתה בטוח שברצונך להחליף לסשן זה?')) {
+            fetch('/switch_session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: filename
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showAlert(data.message, data.success ? 'success' : 'danger');
+                if (data.success) {
+                    updateUserStatus();
+                    loadSessionsList();
+                }
+            })
+            .catch(error => {
+                showAlert('שגיאה בהחלפת סשן: ' + error.message, 'danger');
+            });
+        }
+    }
+</script>
+{% endblock %}
